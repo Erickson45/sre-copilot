@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: Lint & Testes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Testes (pytest)
+        run: pytest -v
+
+  docker:
+    name: Build, Smoke Test & Publish
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build da imagem
+        run: docker build -t sre-copilot:ci .
+
+      - name: Smoke test do container
+        run: |
+          docker run -d --name sre-copilot -p 5000:5000 sre-copilot:ci
+          for i in $(seq 1 15); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:5000/webhook/alert \
+              -H "Content-Type: application/json" \
+              -d '{"host":"srv-ci","trigger":"Nginx 502 Bad Gateway Detected"}') || true
+            if [ "$code" = "200" ]; then echo "API respondeu 200"; exit 0; fi
+            sleep 2
+          done
+          docker logs sre-copilot
+          exit 1
+
+      - name: Login no GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publicar imagem no GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          IMAGE=ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker tag sre-copilot:ci $IMAGE:latest
+          docker tag sre-copilot:ci $IMAGE:${{ github.sha }}
+          docker push $IMAGE:latest
+          docker push $IMAGE:${{ github.sha }}
