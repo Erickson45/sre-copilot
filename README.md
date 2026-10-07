@@ -9,6 +9,8 @@
 ![Ollama](https://img.shields.io/badge/Local_LLM-Ollama-0F172A?style=for-the-badge&logo=ollama&logoColor=00E5FF)
 ![Docker](https://img.shields.io/badge/Docker-Ready-0F172A?style=for-the-badge&logo=docker&logoColor=00E5FF)
 
+[![CI](https://github.com/Erickson45/sre-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/Erickson45/sre-copilot/actions/workflows/ci.yml)
+
 </div>
 
 ---
@@ -32,6 +34,25 @@ O resultado? O sistema mastiga o alerta e entrega no chat da equipe (Teams/Disco
 3. 📚 **Retrieval-Augmented Generation (RAG):** O motor busca na pasta `/runbooks` o documento Markdown correspondente à falha.
 4. 🤖 **Inferência Local (Ollama):** A IA lê o alerta cru + a documentação corporativa e gera um plano de ação.
 5. 💬 **Notificação:** O alerta enriquecido é disparado no chat da equipe operacional.
+
+---
+
+## ✅ CI/CD (GitHub Actions)
+
+A cada push/PR na `main`, o pipeline [`ci.yml`](.github/workflows/ci.yml) executa:
+
+1. **Lint** com `ruff`.
+2. **Testes** com `pytest` (API Flask, busca de runbooks e resiliência quando o Ollama está fora do ar).
+3. **Build da imagem Docker** e **smoke test** do container (sobe a API e valida o `POST /webhook/alert`).
+4. **Publicação** da imagem no GitHub Container Registry: `ghcr.io/erickson45/sre-copilot:latest`.
+
+Rodando os testes localmente:
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+ruff check .
+pytest -v
+```
 
 ---
 
